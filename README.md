@@ -26,7 +26,8 @@ El sistema modela una plataforma de venta y reserva de boletería para eventos m
 ## 🏗️ 2. Estructura del Repositorio
 
 ```text
-codigo_base/
+./
+├── docs/                 # Informe LaTeX (.tex/.pdf), figuras y mockups
 ├── build.gradle          # Configuración raíz de compilación Gradle
 ├── settings.gradle       # Inclusión de submódulos (common, server, client)
 ├── gradlew / gradlew.bat # Gradle Wrapper ejecutable
@@ -47,7 +48,7 @@ codigo_base/
 ## 🚀 3. Instrucciones de Ejecución del Backend
 
 ### Paso 1: Iniciar el Servidor ZeroC Ice
-En una terminal en la raíz de `codigo_base`:
+En una terminal en la raíz del repositorio:
 ```bash
 ./gradlew runServer
 ```
