@@ -1,0 +1,54 @@
+/* Page grid and breakpoints (DESIGN.md section 3). Mobile first. */
+.app {
+  display: grid;
+  /* minmax(0, 1fr) lets children shrink below their content width. */
+  grid-template-columns: minmax(0, 1fr);
+  gap: var(--space-4);
+  width: 100%;
+  max-width: var(--content-max);
+  margin: 0 auto;
+  padding: var(--space-4);
+  /* Room for the cart's sticky bottom bar on small screens. */
+  padding-bottom: calc(var(--space-8) * 3);
+}
+
+.app__main {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr);
+  gap: var(--space-4);
+  min-width: 0;
+}
+
+.app__map,
+.app__cart {
+  min-width: 0;
+}
+
+.panel {
+  padding: var(--space-4);
+  border: 1px solid var(--color-border);
+  border-radius: var(--radius-lg);
+  background: var(--color-surface);
+}
+
+@media (min-width: 640px) {
+  .panel {
+    padding: var(--space-6);
+  }
+}
+
+@media (min-width: 1024px) {
+  .app {
+    padding-bottom: var(--space-8);
+  }
+
+  .app__main {
+    grid-template-columns: minmax(0, 1fr) var(--cart-width);
+    align-items: start;
+  }
+
+  .app__cart {
+    position: sticky;
+    top: var(--space-4);
+  }
+}

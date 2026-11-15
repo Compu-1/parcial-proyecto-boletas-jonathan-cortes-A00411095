@@ -1,0 +1,89 @@
+/* Design tokens (DESIGN.md section 2). The only file with raw values. */
+:root {
+  color-scheme: dark;
+
+  /* Surfaces, darkest to lightest */
+  --color-bg: #05122b;
+  --color-surface: #0a1c3a;
+  --color-surface-raised: #132644;
+  --color-border: rgb(255 255 255 / 0.12);
+  --color-hover-tint: rgb(255 255 255 / 0.06);
+  --color-overlay: rgb(5 18 43 / 0.8);
+
+  /* Text */
+  --color-text: #ffffff;
+  --color-text-muted: rgb(255 255 255 / 0.7);
+  --color-text-subtle: rgb(255 255 255 / 0.5);
+  --color-text-on-accent: #05122b;
+
+  /* Brand */
+  --color-primary: #0068c8;
+  --color-primary-hover: #1a7fe0;
+  --color-primary-active: #0058ad;
+  --color-accent: #42d3fe;
+  --color-accent-soft: #7bc1eb;
+
+  /* Seats */
+  --color-seat-available: #1a3460;
+  --color-seat-available-hover: #234a85;
+  --color-seat-available-border: #4f7fc4;
+  --color-seat-mine: var(--color-accent);
+  --color-seat-locked: #8fa0dc;
+  --color-seat-booked: #2b3550;
+
+  /* Feedback */
+  --color-success: #34d571;
+  --color-warning: #f59e0b;
+  --color-danger: #e63946;
+  --color-info: var(--color-accent-soft);
+
+  /* Typography */
+  --font-sans: Inter, system-ui, -apple-system, "Segoe UI", Roboto, sans-serif;
+  --font-mono: ui-monospace, "SF Mono", "Cascadia Code", Consolas, monospace;
+  --text-xs: 0.75rem;
+  --text-sm: 0.875rem;
+  --text-md: 1rem;
+  --text-lg: 1.125rem;
+  --text-xl: 1.5rem;
+  --text-2xl: 2rem;
+
+  /* Spacing */
+  --space-1: 4px;
+  --space-2: 8px;
+  --space-3: 12px;
+  --space-4: 16px;
+  --space-6: 24px;
+  --space-8: 32px;
+
+  /* Radius */
+  --radius-sm: 4px;
+  --radius-md: 8px;
+  --radius-lg: 16px;
+  --radius-pill: 999px;
+
+  /* Shadows */
+  --shadow-card: 0 8px 24px rgb(0 0 0 / 0.35);
+  --shadow-stage: 0 12px 40px rgb(66 211 254 / 0.25);
+  --focus-ring: 0 0 0 2px var(--color-bg), 0 0 0 4px var(--color-accent);
+
+  /* Motion */
+  --duration-fast: 150ms;
+  --duration-base: 200ms;
+  --duration-slow: 600ms;
+  --ease: cubic-bezier(0.2, 0, 0, 1);
+
+  /* Layout */
+  --content-max: 1200px;
+  --cart-width: 360px;
+  --control-height: 44px;
+  --seat-size: clamp(24px, 6.5vw, 40px);
+}
+
+/* Reduced motion: every animation and transition reads these tokens. */
+@media (prefers-reduced-motion: reduce) {
+  :root {
+    --duration-fast: 0ms;
+    --duration-base: 0ms;
+    --duration-slow: 0ms;
+  }
+}

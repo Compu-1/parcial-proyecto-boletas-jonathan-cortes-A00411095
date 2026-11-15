@@ -1,0 +1,31 @@
+.connection-status__dot {
+  width: 8px;
+  height: 8px;
+  border-radius: var(--radius-pill);
+  background: var(--color-text-subtle);
+}
+
+.connection-status[data-status="connected"] .connection-status__dot {
+  background: var(--color-success);
+}
+
+.connection-status[data-status="connecting"] .connection-status__dot,
+.connection-status[data-status="reconnecting"] .connection-status__dot {
+  background: var(--color-warning);
+  animation: connection-pulse var(--duration-slow) var(--ease) infinite
+    alternate;
+}
+
+.connection-status[data-status="disconnected"] {
+  border-color: var(--color-danger);
+}
+
+.connection-status[data-status="disconnected"] .connection-status__dot {
+  background: var(--color-danger);
+}
+
+@keyframes connection-pulse {
+  to {
+    opacity: 0.3;
+  }
+}

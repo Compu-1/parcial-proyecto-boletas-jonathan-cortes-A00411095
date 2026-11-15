@@ -60,7 +60,7 @@ These are never broken. If a task seems to require breaking one, stop and ask.
   - `pnpm slice`: regenerate the Ice stubs.
 - Pin the `ice` package to the 3.7 line. It must match the server (`com.zeroc:ice:3.7.10`) and the local `slice2js`.
 - Generate the stubs with `slice2js --typescript` from `common/src/main/slice/` into `client-js/src/generated/`, as ES modules.
-- How the Ice 3.7 output and the `ice` package behave under Vite (ESM and CommonJS interop, `optimizeDeps`) is not verified yet. Verify it first when setting up the frontend, then record the working setup in this section.
+- Ice under Vite (verified): the `.ice` file starts with the file metadata `[["js:es6-module"]]`, so `slice2js` emits `import { Ice } from "ice"` / `export { BookingApp }`. Import the stubs as `../generated/BookingService.js`. The `ice` package is CommonJS and Vite pre-bundles it with no `optimizeDeps` config. Vite warns that `fs` and `net` are "externalized for browser compatibility"; that is harmless, because Ice only loads them when `typeof process !== 'undefined'` (Node).
 - Do not hard-code the Ice endpoint. Read the host from `VITE_ICE_HOST` (default `window.location.hostname`) and the port from `VITE_ICE_PORT` (default `10002`), so the VM deployment needs no code change.
 
 ## 5. Frontend architecture
@@ -84,6 +84,7 @@ These are never broken. If a task seems to require breaking one, stop and ask.
   - On disconnection, reconnect with backoff and subscribe again.
 - Validate name and email in the form before calling `confirmBooking`. The server stays the authority.
 - Plain CSS with custom properties. The seat grid is responsive, seat state is never shown by colour alone, and seats and the modal work from the keyboard.
+- Visual design (palette, tokens, layout, per-component look and copy) follows `DESIGN.md`.
 
 ## 6. Backend rules
 
@@ -98,7 +99,7 @@ These are never broken. If a task seems to require breaking one, stop and ask.
   - Remove a subscriber when a callback fails or its connection closes.
   - Enable heartbeats so the WebSocket stays open while idle.
 - Contract changes are additive. Existing operations keep their signatures so the Java console client and the stress test keep working. Update the Java client whenever the contract changes.
-- `./gradlew runClient --args="--test-concurrency"` must report exactly one successful lock out of 10 threads.
+- `./gradlew :client:runClient --args="--test-concurrency"` must report exactly one successful lock out of 10 threads. Call the subproject task: the root `runClient` alias does not accept `--args`.
 
 ## 7. Workflow
 
@@ -116,7 +117,7 @@ Backend, from the repository root:
 ```bash
 ./gradlew runServer                               # TCP 10000 + WebSocket 10002
 ./gradlew runClient                               # interactive console client
-./gradlew runClient --args="--test-concurrency"   # 10 threads locking A-1
+./gradlew :client:runClient --args="--test-concurrency"   # 10 threads locking A-1
 ```
 
 Frontend, from `client-js/`:

@@ -1,0 +1,139 @@
+.cart {
+  display: grid;
+  gap: var(--space-4);
+}
+
+.cart__empty {
+  color: var(--color-text-muted);
+}
+
+/* Countdown */
+.cart__timer {
+  --timer-color: var(--color-accent);
+  display: grid;
+  grid-template-columns: 1fr auto;
+  align-items: center;
+  gap: var(--space-2);
+  padding: var(--space-3) var(--space-4);
+  border: 1px solid var(--timer-color);
+  border-radius: var(--radius-md);
+  background: var(--color-surface-raised);
+}
+
+.cart__timer[data-level="warning"] {
+  --timer-color: var(--color-warning);
+}
+
+.cart__timer[data-level="danger"] {
+  --timer-color: var(--color-danger);
+}
+
+.cart__timer-label {
+  color: var(--color-text-muted);
+}
+
+.cart__timer-value {
+  color: var(--timer-color);
+  font-size: var(--text-2xl);
+  font-weight: 700;
+  line-height: 1;
+}
+
+.cart__track {
+  grid-column: 1 / -1;
+  height: 4px;
+  border-radius: var(--radius-pill);
+  background: var(--color-border);
+  overflow: hidden;
+}
+
+.cart__fill {
+  height: 100%;
+  background: var(--timer-color);
+  transition: width var(--duration-base) linear;
+}
+
+/* Seat list */
+.cart__list-title {
+  color: var(--color-text-muted);
+}
+
+.cart__list {
+  display: grid;
+  gap: var(--space-2);
+}
+
+.cart__item {
+  display: grid;
+  grid-template-columns: 1fr auto auto;
+  align-items: center;
+  gap: var(--space-2);
+  padding: var(--space-2) var(--space-2) var(--space-2) var(--space-3);
+  border: 1px solid var(--color-border);
+  border-left: 3px solid var(--color-accent);
+  border-radius: var(--radius-md);
+  background: var(--color-surface-raised);
+}
+
+.cart__item-name {
+  font-weight: 600;
+}
+
+.cart__total {
+  display: flex;
+  justify-content: space-between;
+  align-items: baseline;
+  padding-top: var(--space-4);
+  border-top: 1px solid var(--color-border);
+  color: var(--color-text-muted);
+}
+
+.cart__total-value {
+  color: var(--color-text);
+  font-size: var(--text-xl);
+  font-weight: 700;
+}
+
+.cart__actions {
+  display: grid;
+  gap: var(--space-2);
+}
+
+/* Sticky bottom bar below 1024px */
+.cart__bar {
+  position: fixed;
+  inset: auto 0 0;
+  z-index: 10;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: var(--space-3);
+  padding: var(--space-3) var(--space-4);
+  border-top: 1px solid var(--color-border);
+  background: var(--color-surface-raised);
+  box-shadow: var(--shadow-card);
+}
+
+.cart__bar-text {
+  font-weight: 600;
+}
+
+/* Empty cart: show the hint, hide the rest. */
+.cart[data-empty="true"] .cart__timer,
+.cart[data-empty="true"] .cart__list-title,
+.cart[data-empty="true"] .cart__list,
+.cart[data-empty="true"] .cart__total,
+.cart[data-empty="true"] .cart__bar {
+  display: none;
+}
+
+.cart[data-empty="false"] .cart__empty {
+  display: none;
+}
+
+@media (min-width: 1024px) {
+  .cart__bar,
+  .cart[data-empty="false"] .cart__bar {
+    display: none;
+  }
+}

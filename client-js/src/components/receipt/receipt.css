@@ -1,0 +1,101 @@
+.receipt {
+  display: grid;
+  gap: var(--space-4);
+}
+
+.receipt__title {
+  display: flex;
+  align-items: center;
+  gap: var(--space-2);
+  font-size: var(--text-xl);
+}
+
+.receipt__check {
+  display: inline-grid;
+  place-items: center;
+  width: 32px;
+  height: 32px;
+  border-radius: var(--radius-pill);
+  background: var(--color-success);
+  color: var(--color-text-on-accent);
+  font-size: var(--text-md);
+}
+
+/* Ticket with notched sides and a dashed tear line. */
+.ticket {
+  --notch: 10px;
+  --notch-at: 72px;
+  display: grid;
+  gap: var(--space-4);
+  padding: var(--space-4);
+  border-radius: var(--radius-md);
+  background:
+    radial-gradient(
+      circle at 0 var(--notch-at),
+      transparent var(--notch),
+      var(--color-surface-raised) calc(var(--notch) + 0.5px)
+    )
+    left / 51% 100% no-repeat,
+    radial-gradient(
+      circle at 100% var(--notch-at),
+      transparent var(--notch),
+      var(--color-surface-raised) calc(var(--notch) + 0.5px)
+    )
+    right / 51% 100% no-repeat;
+}
+
+.ticket__head {
+  display: grid;
+  gap: var(--space-1);
+  min-height: calc(var(--notch-at) - var(--space-4));
+  padding-bottom: var(--space-3);
+  border-bottom: 2px dashed var(--color-border);
+  text-align: center;
+}
+
+.ticket__caption {
+  color: var(--color-text-muted);
+  font-size: var(--text-xs);
+  text-transform: uppercase;
+  letter-spacing: 0.08em;
+}
+
+.ticket__code {
+  color: var(--color-accent);
+  font-family: var(--font-mono);
+  font-size: var(--text-2xl);
+  font-weight: 700;
+  letter-spacing: 0.04em;
+}
+
+.ticket__details {
+  display: grid;
+  gap: var(--space-2);
+  margin: 0;
+}
+
+.ticket__row {
+  display: flex;
+  justify-content: space-between;
+  gap: var(--space-4);
+}
+
+.ticket__row dt {
+  color: var(--color-text-muted);
+}
+
+.ticket__row dd {
+  margin: 0;
+  text-align: right;
+  overflow-wrap: anywhere;
+}
+
+.ticket--compact {
+  --notch: 8px;
+  --notch-at: 56px;
+  gap: var(--space-3);
+}
+
+.ticket--compact .ticket__code {
+  font-size: var(--text-lg);
+}

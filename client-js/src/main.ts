@@ -1,60 +1,86 @@
-import './style.css'
-import heroImg from './assets/hero.png'
-import typescriptLogo from './assets/typescript.svg'
-import viteLogo from './assets/vite.svg'
-import { setupCounter } from './counter.ts'
+// Entry point: builds the page, wires components to the store and actions.
+import './styles/tokens.css';
+import './styles/base.css';
+import './styles/layout.css';
 
-document.querySelector<HTMLDivElement>('#app')!.innerHTML = `
-<section id="center">
-  <div class="hero">
-    <img src="${heroImg}" class="base" width="170" height="179">
-    <img src="${typescriptLogo}" class="framework" alt="TypeScript logo"/>
-    <img src="${viteLogo}" class="vite" alt="Vite logo" />
-  </div>
-  <div>
-    <h1>Get started</h1>
-    <p>Edit <code>src/main.ts</code> and save to test <code>HMR</code></p>
-  </div>
-  <button id="counter" type="button" class="counter"></button>
-</section>
+import { createCart } from './components/cart/cart.ts';
+import { createCheckoutModal } from './components/checkout-modal/checkout-modal.ts';
+import { type Component, el } from './components/component.ts';
+import { createEventHeader } from './components/event-header/event-header.ts';
+import { createLegend } from './components/legend/legend.ts';
+import { createMyBookings } from './components/my-bookings/my-bookings.ts';
+import { createNotifications } from './components/notifications/notifications.ts';
+import { createSeatMap } from './components/seat-map/seat-map.ts';
+import { createActions } from './state/actions.ts';
+import { createStore, initialState } from './state/store.ts';
 
-<div class="ticks"></div>
+const store = createStore(initialState);
+const actions = createActions(store);
 
-<section id="next-steps">
-  <div id="docs">
-    <svg class="icon" role="presentation" aria-hidden="true"><use href="/icons.svg#documentation-icon"></use></svg>
-    <h2>Documentation</h2>
-    <p>Your questions, answered</p>
-    <ul>
-      <li>
-        <a href="https://vite.dev/" target="_blank">
-          <img class="logo" src="${viteLogo}" alt="" />
-          Explore Vite
-        </a>
-      </li>
-      <li>
-        <a href="https://www.typescriptlang.org" target="_blank">
-          <img class="button-icon" src="${typescriptLogo}" alt="">
-          Learn more
-        </a>
-      </li>
-    </ul>
-  </div>
-  <div id="social">
-    <svg class="icon" role="presentation" aria-hidden="true"><use href="/icons.svg#social-icon"></use></svg>
-    <h2>Connect with us</h2>
-    <p>Join the Vite community</p>
-    <ul>
-      <li><a href="https://github.com/vitejs/vite" target="_blank"><svg class="button-icon" role="presentation" aria-hidden="true"><use href="/icons.svg#github-icon"></use></svg>GitHub</a></li>
-      <li><a href="https://chat.vite.dev/" target="_blank"><svg class="button-icon" role="presentation" aria-hidden="true"><use href="/icons.svg#discord-icon"></use></svg>Discord</a></li>
-      <li><a href="https://x.com/vite_js" target="_blank"><svg class="button-icon" role="presentation" aria-hidden="true"><use href="/icons.svg#x-icon"></use></svg>X.com</a></li>
-      <li><a href="https://bsky.app/profile/vite.dev" target="_blank"><svg class="button-icon" role="presentation" aria-hidden="true"><use href="/icons.svg#bluesky-icon"></use></svg>Bluesky</a></li>
-    </ul>
-  </div>
-</section>
+// Page skeleton (DESIGN.md section 3).
+const app = document.querySelector<HTMLDivElement>('#app');
+if (!app) {
+  throw new Error('Missing #app element in index.html');
+}
+app.className = 'app';
+const headerSlot = el('div');
+const main = el('main', 'app__main');
+const mapColumn = el('div', 'app__map panel');
+const cartColumn = el('div', 'app__cart');
+main.append(mapColumn, cartColumn);
+const bookingsSlot = el('div');
+app.append(headerSlot, main, bookingsSlot);
 
-<div class="ticks"></div>
-<section id="spacer"></section>
-`
+// Components only receive intents; they never see Ice.
+const mounts: [Component, HTMLElement][] = [
+  [createEventHeader(), headerSlot],
+  [
+    createSeatMap({ onToggleSeat: id => void actions.toggleSeat(id) }),
+    mapColumn,
+  ],
+  [createLegend(), mapColumn],
+  [
+    createCart({
+      onCheckout: actions.openCheckout,
+      onReleaseSeat: id => void actions.toggleSeat(id),
+      onReleaseAll: () => void actions.releaseAll(),
+      onExpired: () => void actions.refresh(),
+    }),
+    cartColumn,
+  ],
+  [createMyBookings(), bookingsSlot],
+  [
+    createCheckoutModal({
+      onConfirm: (name, email) => void actions.confirmBooking(name, email),
+      onClose: actions.closeCheckout,
+    }),
+    document.body,
+  ],
+  [createNotifications({ onDismiss: actions.dismissNotice }), document.body],
+];
 
-setupCounter(document.querySelector<HTMLButtonElement>('#counter')!)
+const components = mounts.map(([component, parent]) => {
+  component.mount(parent);
+  return component;
+});
+
+const render = () => {
+  const state = store.getState();
+  for (const component of components) {
+    component.update(state);
+  }
+};
+store.subscribe(render);
+render();
+
+// Coming back to the tab: resync in case others booked meanwhile.
+document.addEventListener('visibilitychange', () => {
+  if (
+    document.visibilityState === 'visible' &&
+    store.getState().connection === 'connected'
+  ) {
+    void actions.refresh();
+  }
+});
+
+void actions.start();

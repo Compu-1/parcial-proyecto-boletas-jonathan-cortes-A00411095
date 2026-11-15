@@ -1,3 +1,5 @@
+[["js:es6-module"]]
+
 module BookingApp {
 
     enum SeatZone {
