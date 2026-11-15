@@ -4,3 +4,6 @@ build/
 *.iml
 .vscode/
 bin/
+
+# Generated Ice stubs (run `pnpm slice`)
+client-js/src/generated/

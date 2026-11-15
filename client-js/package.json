@@ -4,9 +4,11 @@
   "version": "0.0.0",
   "type": "module",
   "scripts": {
+    "start": "vite",
     "dev": "vite",
     "build": "tsc && vite build",
-    "preview": "vite preview"
+    "preview": "vite preview",
+    "slice": "mkdir -p src/generated && slice2js --typescript --output-dir src/generated ../common/src/main/slice/BookingService.ice"
   },
   "devDependencies": {
     "@biomejs/biome": "2.6.6",
