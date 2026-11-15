@@ -18,10 +18,12 @@ const port = import.meta.env.VITE_ICE_PORT || '10002';
 function createCommunicator(): Ice.Communicator {
   const initData = new Ice.InitializationData();
   initData.properties = Ice.createProperties();
-  // Send heartbeats so the WebSocket stays open while the user is idle,
-  // and never close the connection for inactivity.
+  // Same policy as the server: both sides always send heartbeats, and the
+  // connection closes only if nothing arrives for 30 s. An idle tab keeps its
+  // WebSocket (and its callbacks); a dead server is detected within 30 s.
+  initData.properties.setProperty('Ice.ACM.Client.Timeout', '30');
   initData.properties.setProperty('Ice.ACM.Client.Heartbeat', '3'); // Always
-  initData.properties.setProperty('Ice.ACM.Client.Close', '0'); // Off
+  initData.properties.setProperty('Ice.ACM.Client.Close', '4'); // OnIdleForceful
   // Fail fast (5 s) when the server is down instead of waiting forever.
   initData.properties.setProperty('Ice.Override.ConnectTimeout', '5000');
   return Ice.initialize(initData);
@@ -59,7 +61,16 @@ function toZone(zone: BookingApp.SeatZone): Zone {
   return 'GENERAL';
 }
 
-function toSeatView(seat: BookingApp.Seat, now: number): SeatView {
+/**
+ * `mine` holds the ids the server says this tab has locked
+ * (getMyLockedSeats). We never compare lockedByClientId ourselves: the
+ * callbacks blank it, and "mine" always comes from the server.
+ */
+function toSeatView(
+  seat: BookingApp.Seat,
+  now: number,
+  mine: ReadonlySet<string>,
+): SeatView {
   const base = {
     id: seat.id,
     zone: toZone(seat.zone),
@@ -76,11 +87,10 @@ function toSeatView(seat: BookingApp.Seat, now: number): SeatView {
     const expiresAt =
       seat.lockTimestamp.toNumber() +
       seat.lockDurationSeconds.toNumber() * 1000;
-    // The server may still report a lock that has already run out.
-    // An expired lock means the seat can be taken again.
+    // An expired lock means the seat can be taken again (the server's
+    // expiry task will confirm it within a second).
     if (expiresAt > now) {
-      const status: SeatStatus =
-        seat.lockedByClientId === clientId ? 'mine' : 'locked';
+      const status: SeatStatus = mine.has(seat.id) ? 'mine' : 'locked';
       return { ...base, status, expiresAt };
     }
   }
@@ -119,27 +129,34 @@ export interface Snapshot {
   bookings: BookingView[];
 }
 
-/** Reads everything the page shows. Used on load and after every action. */
+/** Reads everything the page shows. Used on connect and after failures. */
 export async function loadSnapshot(): Promise<Snapshot> {
-  const [info, seats, bookings] = await Promise.all([
+  const [info, seats, myLocks, bookings] = await Promise.all([
     proxy.getEventInfo(),
     proxy.getAllSeats(),
+    proxy.getMyLockedSeats(clientId),
     proxy.getMyBookings(clientId),
   ]);
   const now = Date.now();
+  const mine = new Set(myLocks.map(seat => seat.id));
   return {
     event: toEventView(info),
-    seats: seats.map(seat => toSeatView(seat, now)),
+    seats: seats.map(seat => toSeatView(seat, now, mine)),
     bookings: bookings
       .map(toBookingView)
       .sort((a, b) => b.timestamp - a.timestamp),
   };
 }
 
-/** Returns the server's message when the lock is refused without throwing. */
-export async function lockSeat(seatId: string): Promise<string | null> {
+export type LockOutcome =
+  | { ok: true; expiresAt: number }
+  | { ok: false; message: string };
+
+export async function lockSeat(seatId: string): Promise<LockOutcome> {
   const result = await proxy.lockSeat(seatId, clientId);
-  return result.success ? null : result.message;
+  return result.success
+    ? { ok: true, expiresAt: result.expiresAt.toNumber() }
+    : { ok: false, message: result.message };
 }
 
 export async function releaseSeat(seatId: string): Promise<boolean> {
@@ -175,8 +192,51 @@ export async function ping(): Promise<void> {
   await proxy.ice_ping();
 }
 
-/** Calls `onClose` once when the current connection to the server closes. */
-export async function watchConnection(onClose: () => void): Promise<void> {
+// ---------- Real-time callbacks ----------
+
+/** Changed seats arrive with LOCKED as 'locked'; the state layer keeps 'mine'. */
+export type ChangeListener = (seats: SeatView[], event: EventView) => void;
+
+/** Servant the server calls. It only converts types and forwards them. */
+class SeatObserverI extends BookingApp.SeatObserver {
+  private readonly listener: ChangeListener;
+
+  constructor(listener: ChangeListener) {
+    super();
+    this.listener = listener;
+  }
+
+  seatsChanged(seats: BookingApp.SeatList, info: BookingApp.EventInfo) {
+    const now = Date.now();
+    const none = new Set<string>();
+    this.listener(
+      seats.map(seat => toSeatView(seat, now, none)),
+      toEventView(info),
+    );
+  }
+}
+
+let adapter: Ice.ObjectAdapter | null = null;
+let observer: BookingApp.SeatObserverPrx | null = null;
+
+/**
+ * Subscribes this tab to seat changes over a bidirectional connection:
+ * an object adapter with no endpoints is attached to the connection we
+ * opened, so the server calls us back through it (browsers cannot accept
+ * incoming connections). Call it again after every reconnection.
+ */
+export async function subscribe(
+  onChange: ChangeListener,
+  onClose: () => void,
+): Promise<void> {
+  if (!adapter || !observer) {
+    adapter = await communicator.createObjectAdapter('');
+    observer = BookingApp.SeatObserverPrx.uncheckedCast(
+      adapter.addWithUUID(new SeatObserverI(onChange)),
+    );
+  }
   const connection = await proxy.ice_getConnection();
+  connection.setAdapter(adapter);
   connection.setCloseCallback(() => onClose());
+  await proxy.subscribe(observer);
 }

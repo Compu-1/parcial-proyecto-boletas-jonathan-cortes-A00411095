@@ -20,6 +20,7 @@ import BookingApp.InvalidBookingException;
 import BookingApp.LockExpiredException;
 import BookingApp.LockResult;
 import BookingApp.Seat;
+import BookingApp.SeatObserverPrx;
 import BookingApp.SeatNotAvailableException;
 import BookingApp.SeatNotFoundException;
 import BookingApp.SeatState;
@@ -32,6 +33,10 @@ public class BookingServiceImpl implements BookingService {
     private final EventInfo eventInfo;
     private final Map<String, Seat> seatsMap = new HashMap<>();
     private final List<BookingRecord> bookingsList = new ArrayList<>();
+    private final SeatNotifier notifier = new SeatNotifier();
+
+    /** Copies of the changed seats and the counters, taken inside the monitor. */
+    private record Change(Seat[] seats, EventInfo info) {}
 
     public BookingServiceImpl() {
         this.eventInfo = new EventInfo(
@@ -108,6 +113,29 @@ public class BookingServiceImpl implements BookingService {
         eventInfo.bookedSeats = booked;
     }
 
+    /**
+     * Must be called while holding the monitor. Returns copies, never the
+     * internal objects, with the owner hidden: buyers never see other ids.
+     */
+    private Change captureChange(Iterable<String> seatIds) {
+        updateEventCounters();
+        List<Seat> copies = new ArrayList<>();
+        for (String id : seatIds) {
+            Seat seat = seatsMap.get(id);
+            if (seat != null) {
+                Seat copy = seat.clone();
+                copy.lockedByClientId = "";
+                copies.add(copy);
+            }
+        }
+        return new Change(copies.toArray(new Seat[0]), eventInfo.clone());
+    }
+
+    /** Caller holds the monitor: queues the change in commit order (see SeatNotifier). */
+    private void publish(Change change) {
+        notifier.publish(change.seats(), change.info());
+    }
+
     @Override
     public synchronized EventInfo getEventInfo(Current current) {
         updateEventCounters();
@@ -146,7 +174,19 @@ public class BookingServiceImpl implements BookingService {
     }
 
     @Override
-    public synchronized LockResult lockSeat(String seatId, String clientId, Current current)
+    public LockResult lockSeat(String seatId, String clientId, Current current)
+            throws SeatNotFoundException, SeatNotAvailableException {
+        // Check-then-act, snapshot and enqueue under the monitor; the callbacks
+        // themselves are sent later by the notifier thread, outside it.
+        synchronized (this) {
+            LockResult result = lockSeatLocked(seatId, clientId);
+            publish(captureChange(List.of(seatId)));
+            return result;
+        }
+    }
+
+    /** Caller holds the monitor. */
+    private LockResult lockSeatLocked(String seatId, String clientId)
             throws SeatNotFoundException, SeatNotAvailableException {
 
         // An empty clientId is the value that means "nobody" in Seat.lockedByClientId
@@ -197,7 +237,18 @@ public class BookingServiceImpl implements BookingService {
     }
 
     @Override
-    public synchronized boolean releaseSeat(String seatId, String clientId, Current current) throws SeatNotFoundException {
+    public boolean releaseSeat(String seatId, String clientId, Current current) throws SeatNotFoundException {
+        synchronized (this) {
+            boolean released = releaseSeatLocked(seatId, clientId);
+            if (released) {
+                publish(captureChange(List.of(seatId)));
+            }
+            return released;
+        }
+    }
+
+    /** Caller holds the monitor. */
+    private boolean releaseSeatLocked(String seatId, String clientId) throws SeatNotFoundException {
         Seat seat = seatsMap.get(seatId);
         if (seat == null) {
             throw new SeatNotFoundException("Silla no encontrada: " + seatId);
@@ -217,7 +268,17 @@ public class BookingServiceImpl implements BookingService {
     }
 
     @Override
-    public synchronized BookingResult confirmBooking(String[] seatIds, String clientId, String customerName, String customerEmail, Current current)
+    public BookingResult confirmBooking(String[] seatIds, String clientId, String customerName, String customerEmail, Current current)
+            throws InvalidBookingException, BookingException {
+        synchronized (this) {
+            BookingResult result = confirmBookingLocked(seatIds, clientId, customerName, customerEmail);
+            publish(captureChange(List.of(seatIds)));
+            return result;
+        }
+    }
+
+    /** Caller holds the monitor. All or nothing: validates every seat before changing any. */
+    private BookingResult confirmBookingLocked(String[] seatIds, String clientId, String customerName, String customerEmail)
             throws InvalidBookingException, BookingException {
 
         if (seatIds == null || seatIds.length == 0) {
@@ -325,8 +386,50 @@ public class BookingServiceImpl implements BookingService {
     }
 
     @Override
-    public synchronized void resetSeats(Current current) {
-        initSeats();
+    public void resetSeats(Current current) {
+        synchronized (this) {
+            initSeats();
+            publish(captureChange(seatsMap.keySet()));
+        }
         System.out.println("[RESET] Inventario y reservas reiniciadas a estado de fábrica.");
+    }
+
+    /**
+     * Run every second by a scheduled task (see BookingServerApp). Frees expired
+     * locks proactively, so no tab keeps showing a stale LOCKED seat.
+     */
+    public void expireLocks() {
+        synchronized (this) {
+            List<String> expired = new ArrayList<>();
+            for (Seat seat : seatsMap.values()) {
+                if (isLockExpired(seat)) {
+                    seat.state = SeatState.AVAILABLE;
+                    seat.lockedByClientId = "";
+                    seat.lockTimestamp = 0L;
+                    expired.add(seat.id);
+                }
+            }
+            if (expired.isEmpty()) {
+                return;
+            }
+            System.out.printf("[LOCK-EXPIRED] Sillas liberadas por tiempo: %s%n", expired);
+            publish(captureChange(expired));
+        }
+    }
+
+    @Override
+    public void subscribe(SeatObserverPrx observer, Current current) {
+        // current.con is null only for collocated calls: there is no
+        // connection to call back on, so there is nothing to subscribe.
+        if (observer != null && current.con != null) {
+            notifier.add(observer, current.con);
+        }
+    }
+
+    @Override
+    public void unsubscribe(SeatObserverPrx observer, Current current) {
+        if (observer != null && current.con != null) {
+            notifier.remove(observer.ice_fixed(current.con));
+        }
     }
 }

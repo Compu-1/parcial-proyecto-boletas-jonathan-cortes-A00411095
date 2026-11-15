@@ -1,9 +1,10 @@
 // User intents. Components call these; these call ice/ and update the store.
-// After any failure we reload from the server instead of trusting local state.
+// Other buyers' changes arrive through Ice callbacks (applyChanges). After any
+// failure we reload from the server instead of trusting local state.
 import * as booking from '../ice/booking-client.ts';
 import { isConnectionError, toUserMessage } from '../ice/errors.ts';
 import type { Store } from './store.ts';
-import type { NoticeKind } from './types.ts';
+import type { EventView, NoticeKind, SeatView } from './types.ts';
 
 export interface Actions {
   start(): Promise<void>;
@@ -65,6 +66,43 @@ export function createActions(store: Store): Actions {
     }
   }
 
+  /** Replaces the given seats in the store, keeping the server's order. */
+  function patchSeats(changed: SeatView[]) {
+    const byId = new Map(changed.map(seat => [seat.id, seat]));
+    store.setState({
+      seats: store.getState().seats.map(seat => byId.get(seat.id) ?? seat),
+    });
+  }
+
+  /**
+   * Called by the SeatObserver servant. Callbacks never say whose lock it is,
+   * so a seat that is already ours stays 'mine' while it is still LOCKED
+   * (the server sends changes in commit order: if our lock had ended we would
+   * first receive it as AVAILABLE).
+   */
+  function applyChanges(changed: SeatView[], event: EventView) {
+    const current = new Map(store.getState().seats.map(s => [s.id, s]));
+    const merged = changed.map(seat =>
+      seat.status === 'locked' && current.get(seat.id)?.status === 'mine'
+        ? { ...seat, status: 'mine' as const }
+        : seat,
+    );
+    patchSeats(merged);
+    store.setState({ event });
+    closeCheckoutIfCartEmptied();
+  }
+
+  function setSeatStatus(
+    seatId: string,
+    status: SeatView['status'],
+    expiresAt: number | null,
+  ) {
+    const seat = store.getState().seats.find(s => s.id === seatId);
+    if (seat) {
+      patchSeats([{ ...seat, status, expiresAt }]);
+    }
+  }
+
   async function handleFailure(error: unknown) {
     if (isConnectionError(error)) {
       void reconnect();
@@ -74,11 +112,17 @@ export function createActions(store: Store): Actions {
     await refresh();
   }
 
-  /** Called once per connection: when it closes, start reconnecting. */
+  /**
+   * Called once per connection. Subscribe first, then read the snapshot, so
+   * no change can slip between the two. When the connection closes, the
+   * subscription dies with it: reconnect() subscribes again.
+   */
   async function onConnected() {
+    await booking.subscribe(applyChanges, () => void reconnect());
+    // Not refresh(): it swallows errors, and the retry loop needs them.
+    store.setState(await booking.loadSnapshot());
     store.setState({ connection: 'connected' });
-    await booking.watchConnection(() => void reconnect());
-    await refresh();
+    closeCheckoutIfCartEmptied();
   }
 
   /** Retries with exponential backoff (1 s, 2 s, 4 s… up to 10 s). */
@@ -94,6 +138,7 @@ export function createActions(store: Store): Actions {
     for (;;) {
       try {
         await booking.ping();
+        await onConnected();
         break;
       } catch {
         attempts++;
@@ -107,7 +152,6 @@ export function createActions(store: Store): Actions {
 
     reconnecting = false;
     notify('success', 'Conexión restablecida.');
-    await onConnected();
   }
 
   async function start() {
@@ -151,14 +195,21 @@ export function createActions(store: Store): Actions {
     setPending(seatId, true);
     try {
       if (seat.status === 'mine') {
-        await booking.releaseSeat(seatId);
+        if (await booking.releaseSeat(seatId)) {
+          setSeatStatus(seatId, 'available', null);
+        } else {
+          await refresh(); // the lock had already ended
+        }
       } else {
-        const refusal = await booking.lockSeat(seatId);
-        if (refusal) {
-          notify('warning', refusal);
+        const outcome = await booking.lockSeat(seatId);
+        if (outcome.ok) {
+          // The server's answer is the only proof the seat is ours.
+          setSeatStatus(seatId, 'mine', outcome.expiresAt);
+        } else {
+          notify('warning', outcome.message);
+          await refresh();
         }
       }
-      await refresh();
     } catch (error) {
       await handleFailure(error);
     } finally {
@@ -173,13 +224,15 @@ export function createActions(store: Store): Actions {
     }
     try {
       await Promise.all(ids.map(id => booking.releaseSeat(id)));
+      for (const id of ids) {
+        setSeatStatus(id, 'available', null);
+      }
       notify(
         'info',
         ids.length === 1
           ? 'Liberaste 1 silla.'
           : `Liberaste ${ids.length} sillas.`,
       );
-      await refresh();
     } catch (error) {
       await handleFailure(error);
     }

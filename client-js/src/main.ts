@@ -73,14 +73,5 @@ const render = () => {
 store.subscribe(render);
 render();
 
-// Coming back to the tab: resync in case others booked meanwhile.
-document.addEventListener('visibilitychange', () => {
-  if (
-    document.visibilityState === 'visible' &&
-    store.getState().connection === 'connected'
-  ) {
-    void actions.refresh();
-  }
-});
-
+// Connects, subscribes to real-time callbacks and loads the first snapshot.
 void actions.start();

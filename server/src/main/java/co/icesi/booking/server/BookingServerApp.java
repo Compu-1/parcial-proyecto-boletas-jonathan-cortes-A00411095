@@ -8,6 +8,9 @@ import com.zeroc.Ice.Util;
 import java.net.InetAddress;
 import java.net.NetworkInterface;
 import java.util.Enumeration;
+import java.util.concurrent.Executors;
+import java.util.concurrent.ScheduledExecutorService;
+import java.util.concurrent.TimeUnit;
 
 public class BookingServerApp {
 
@@ -35,7 +38,14 @@ public class BookingServerApp {
         initData.properties.setProperty("Ice.MessageSizeMax", "4096");
         initData.properties.setProperty("Ice.ThreadPool.Server.Size", "10");
         initData.properties.setProperty("Ice.ThreadPool.Server.SizeMax", "100");
+        // Heartbeats: both sides send them always, and a connection closes only
+        // when nothing arrives for 30 s (dead tab or dead network). Idle but
+        // alive browser connections stay open for the real-time callbacks.
+        initData.properties.setProperty("Ice.ACM.Server.Timeout", "30");
+        initData.properties.setProperty("Ice.ACM.Server.Heartbeat", "3"); // HeartbeatAlways
+        initData.properties.setProperty("Ice.ACM.Server.Close", "4"); // CloseOnIdleForceful
 
+        ScheduledExecutorService lockExpiry = Executors.newSingleThreadScheduledExecutor();
         try (Communicator communicator = Util.initialize(args, initData)) {
             int wsPort = port + 2; // Puerto 10002 para WebSocket de navegadores
             // Endpoint dual: TCP para clientes nativos (puerto 10000) y WebSocket para clientes Web (puerto 10002)
@@ -45,6 +55,16 @@ public class BookingServerApp {
             BookingServiceImpl servant = new BookingServiceImpl();
             adapter.add(servant, Util.stringToIdentity(SERVICE_IDENTITY));
             adapter.activate();
+
+            // Expire locks proactively every second and notify the tabs.
+            lockExpiry.scheduleAtFixedRate(() -> {
+                try {
+                    servant.expireLocks();
+                } catch (RuntimeException e) {
+                    // An uncaught exception would cancel all future runs.
+                    System.err.println("[ERROR] Expiración de bloqueos: " + e.getMessage());
+                }
+            }, 1, 1, TimeUnit.SECONDS);
 
             System.out.printf("[OK] Servidor ZeroC Ice activo en endpoints: %s%n", endpoint);
             System.out.printf("[OK] Canal TCP (Clientes Java/Escritorio)   : localhost:%d%n", port);
@@ -61,6 +81,8 @@ public class BookingServerApp {
         } catch (Exception e) {
             System.err.println("[ERROR] Error crítico al iniciar servidor ZeroC Ice: " + e.getMessage());
             e.printStackTrace();
+        } finally {
+            lockExpiry.shutdownNow();
         }
     }
 

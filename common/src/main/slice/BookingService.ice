@@ -83,6 +83,14 @@ module BookingApp {
     exception LockExpiredException extends BookingException {};
     exception InvalidBookingException extends BookingException {};
 
+    // Real-time updates, implemented by each browser tab. The server calls it
+    // over the same connection the tab opened (bidirectional connection).
+    interface SeatObserver {
+        // Seats whose state changed, plus the updated counters.
+        // lockedByClientId is always empty here: buyers never see each other's ids.
+        void seatsChanged(SeatList seats, EventInfo info);
+    };
+
     interface BookingService {
         EventInfo getEventInfo();
         SeatList getAllSeats();
@@ -104,6 +112,12 @@ module BookingApp {
 
         // Utilidad de reinicio para pruebas de laboratorio
         void resetSeats();
+
+        // Real-time subscription. The caller registers a SeatObserver servant on
+        // an object adapter attached to its connection and passes its proxy; the
+        // server binds that proxy to the incoming connection (ice_fixed).
+        void subscribe(SeatObserver* observer);
+        void unsubscribe(SeatObserver* observer);
     };
 
 };
